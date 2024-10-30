@@ -8,6 +8,7 @@
 (define-constant ERROR-TRADING-DISABLED (err u103))
 (define-constant ERROR-INVALID-TRADE-QUANTITY (err u104))
 (define-constant ERROR-ESCROW-TRANSACTION-FAILED (err u105))
+(define-constant ERROR-INVALID-INPUT (err u106))
 
 ;; Data Variables
 (define-data-var contract-administrator principal tx-sender)
@@ -80,10 +81,15 @@
     )
 )
 
+(define-private (validate-uint (value uint))
+    (> value u0)
+)
+
 ;; Public functions
 (define-public (update-price-oracle-address (new-oracle-address principal))
     (begin
         (try! (verify-administrator-access tx-sender))
+        (asserts! (is-some (some new-oracle-address)) ERROR-INVALID-INPUT)
         (ok (var-set commodity-price-oracle new-oracle-address))
     )
 )
@@ -98,6 +104,9 @@
 (define-public (register-new-commodity (commodity-identifier uint) (initial-available-quantity uint) (initial-market-price uint))
     (begin
         (try! (verify-administrator-access tx-sender))
+        (asserts! (validate-uint commodity-identifier) ERROR-INVALID-INPUT)
+        (asserts! (validate-uint initial-available-quantity) ERROR-INVALID-INPUT)
+        (asserts! (validate-uint initial-market-price) ERROR-INVALID-INPUT)
         (try! (validate-trade-parameters initial-available-quantity initial-market-price))
         (map-set available-commodities-inventory
             { commodity-identifier: commodity-identifier }
@@ -113,6 +122,7 @@
 
 (define-public (deposit-funds-to-escrow (deposit-amount uint))
     (begin
+        (asserts! (validate-uint deposit-amount) ERROR-INVALID-INPUT)
         (try! (stx-transfer? deposit-amount tx-sender (as-contract tx-sender)))
         (match (map-get? trader-escrow-accounts { trader-address: tx-sender })
             existing-escrow-account 
@@ -131,6 +141,7 @@
 
 (define-public (withdraw-funds-from-escrow (withdrawal-amount uint))
     (begin
+        (asserts! (validate-uint withdrawal-amount) ERROR-INVALID-INPUT)
         (match (map-get? trader-escrow-accounts { trader-address: tx-sender })
             escrow-account-data
                 (if (>= (get escrow-balance escrow-account-data) withdrawal-amount)
@@ -157,6 +168,9 @@
     )
         (begin
             (asserts! (var-get market-trading-status) ERROR-TRADING-DISABLED)
+            (asserts! (validate-uint commodity-identifier) ERROR-INVALID-INPUT)
+            (asserts! (validate-uint trade-quantity) ERROR-INVALID-INPUT)
+            (asserts! (validate-uint trade-position-id) ERROR-INVALID-INPUT)
             (try! (validate-trade-parameters trade-quantity current-market-price))
             
             ;; Check escrow balance
@@ -198,6 +212,7 @@
         (position-settlement-amount (* (get traded-quantity position-data) current-market-price))
     )
         (begin
+            (asserts! (validate-uint trade-position-id) ERROR-INVALID-INPUT)
             ;; Return funds to escrow account
             (match (map-get? trader-escrow-accounts { trader-address: tx-sender })
                 escrow-account-data
@@ -221,6 +236,7 @@
 ;; Contract initialization
 (define-public (initialize-contract (administrator-address principal))
     (begin
+        (asserts! (is-some (some administrator-address)) ERROR-INVALID-INPUT)
         (var-set contract-administrator administrator-address)
         (var-set commodity-price-oracle administrator-address)
         (ok true)
